@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QFrame
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QDate, pyqtSignal
 from one import Ui_Frame
-from DownloadThread import DownloadThread
+from DownloadThread import *
 import logging
 __author__ = 'user'
 
