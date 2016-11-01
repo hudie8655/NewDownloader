@@ -23,11 +23,13 @@ class MainFrmMy(QDialog,Ui_Dialog):
             sf =  SingleDownloaderFrm(self)
             self.paperlist.append(sf)
             sf.fill_form(s['name'],s['ban'])
+            sf.EndDownloadSignal.connect(self.textEdit.insertPlainText)
             self.verticalLayout.addWidget(sf)
 
             #set onekeydown
             self.pushButton.clicked.connect(sf.pushButton.click)
         self.pushButton.clicked.connect(self.download)
+
 
     def download(self):
         self.pushButton.setEnabled(False)
