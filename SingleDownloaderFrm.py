@@ -11,9 +11,10 @@ __author__ = 'user'
 class SingleDownloaderFrm(QFrame,Ui_Frame):
     sendSettingSignal = pyqtSignal(QDate,QDate,str)
     EndDownloadSignal = pyqtSignal(str)
-    def __init__(self,parent=None):
+    def __init__(self,parent=None,classname='DownloadThread()'):
         super(QFrame,self).__init__(parent)
         self.setupUi(self)
+        self._class_name = classname
 
         #日期默认为今天
         self.SdateEdit.setDate(QDate.currentDate())
@@ -35,7 +36,7 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
 
     def download(self):
         self.pushButton.setEnabled(False)
-        self.t = DownloadThread()
+        self.t = eval(self._class_name)#DownloadThread()
         self.t.progressSignal.connect(self.progressBar.setValue)
         self.t.setMaximumSignal.connect(self.progressBar.setMaximum)
         self.t.tellSignal.connect(self.logmsg)
