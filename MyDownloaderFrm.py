@@ -8,10 +8,10 @@ from SingleDownloaderFrm import SingleDownloaderFrm
 
 settings=[{'name':'人民日报','class':'DownloadThread()','ban':'1-4'},
           {'name':'光明日报','class':'GmrbDownloadThread()','ban':'1-4'},
-          {'name':'经济日报','class':'GmrbDownloadThread()','ban':'1-4'},
-          {'name':'天津日报','class':'GmrbDownloadThread()','ban':'1-4'},
-          {'name':'北京日报','class':'GmrbDownloadThread()','ban':'1-4'},
-          {'name':'学习时报','class':'GmrbDownloadThread()','ban':'1-4'}]
+          {'name':'经济日报','class':'JjrbDownloadThread()','ban':'1-4'},
+          {'name':'天津日报','class':'TjrbDownloadThread()','ban':'1-4'},
+          {'name':'北京日报','class':'BjrbDownloadThread()','ban':'1-4'},
+          {'name':'学习时报','class':'XxsbDownloadThread()','ban':'1-4'}]
 
 class MainFrmMy(QDialog,Ui_Dialog):
     def __init__(self,parent=None):
