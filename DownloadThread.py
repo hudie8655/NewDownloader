@@ -565,7 +565,7 @@ class XxsbDownloadThread(QThread):
                 except Exception as e:
                     print(e)#logging.error('parse %s error' % contenturl)
                 finally:
-                    
+
                     self.progressSignal.emit(i)
         self.endDownload.emit()
 
