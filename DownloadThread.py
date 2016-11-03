@@ -52,7 +52,7 @@ class WriteThread(QThread):
             newslist = []
             count = 1
             try:
-                while  count<=100:
+                while  count<=200:
                     newslist.append(self.myqueue.get(timeout=5))
                     count += 1
                 x=[(news.title,news.content,news.type,news.date,news.banci) for news in newslist]
