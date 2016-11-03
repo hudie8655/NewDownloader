@@ -4,16 +4,74 @@ import time
 from urllib.error import HTTPError,URLError
 import urllib.request
 from testOfflineDB import News
+import queue
+import sqlite3
+
 
 __author__ = 'user'
 
-from PyQt5.QtCore import QThread, pyqtSignal, QCoreApplication, QDate
+from PyQt5.QtCore import QThread, pyqtSignal, QCoreApplication, QDate,QMutex,QWaitCondition
 from bs4 import BeautifulSoup
 import re
 #import logging
 
 #logging.basicConfig(level=logging.INFO)
 
+pipline = queue.Queue()
+mutex = QMutex()
+workingThreadsCount = 0
+workStart = QWaitCondition()
+
+
+class WriteThread(QThread):
+
+    endWrite = pyqtSignal(bool)
+    tellSignal = pyqtSignal(str)
+    
+    def __init__(self):
+        super(WriteThread,self).__init__()
+
+        self.starturls = []
+        self.helperurls = []
+        self.contenturls = []
+        self.myqueue = pipline
+
+
+    def run(self):
+        global workingThreadsCount
+
+        
+        conn = sqlite3.connect('test.db')
+        mutex.lock()
+        if self.myqueue.empty() :
+            self.tellSignal.emit('write thread:wait')
+            workStart.wait(mutex)
+        mutex.unlock()
+        
+        while True:
+            newslist = []
+            count = 1
+            try:
+                while  count<=20:
+                    newslist.append(self.myqueue.get_nowait())
+                    count += 1
+                x=[(news.title,news.content,news.type,news.date,news.banci) for news in newslist]
+                conn.executemany("INSERT INTO NEWS (TITLE,CONTENT,TYPE,DATE,BANCI)   VALUES (?,?,?,?,?)",x)
+                self.tellSignal.emit('write thread:write 100')
+            except queue.Empty:
+                if len(newslist)>0:
+                    x=[(news.title,news.content,news.type,news.date,news.banci) for news in newslist]
+                    conn.executemany("INSERT INTO NEWS (TITLE,CONTENT,TYPE,DATE,BANCI)   VALUES (?,?,?,?,?)",x)
+                    self.tellSignal.emit('write thread:write left')
+                mutex.lock()
+                if workingThreadsCount == 0:
+                    self.endWrite.emit(True)
+                    break
+                else:
+                    pass
+                mutex.unlock() 
+        conn.commit()
+        conn.close()
 
 class DownloadThread(QThread):
 
@@ -28,6 +86,7 @@ class DownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -36,12 +95,22 @@ class DownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+        
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
+    
         self.tellSignal.emit('gen')
         self.starturls.clear()
 
@@ -71,7 +140,7 @@ class DownloadThread(QThread):
         self.tellSignal.emit(''.join(self.starturls))
         for url in self.starturls:
             try:
-                #logging.info('open %s' % url)
+                self.tellSignal.emit('open %s' % url)
                 html = urllib.request.urlopen(url)
                 bsobj = BeautifulSoup(html,'lxml')
                 rp = re.compile('nbs.*$')
@@ -83,33 +152,32 @@ class DownloadThread(QThread):
 
     def parse_content(self):
         self.tellSignal.emit('parse_content')
-        # i['name'] = response.xpath('//h1/text()').extract()[0]
-        # i['ban']=response.xpath('//div[@class="lai"]/text()').extract()[0].split()[4]
-        # i['date']=response.xpath('//div[@class="lai"]/text()').extract()[0].split()[3]
-        # i['content']=u''.join(response.xpath('//div[@id="articleContent"]/descendant::text()').extract())
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('rmdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    #logging.info('parse %s' % contenturl)
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = bsobj.h1.get_text()+bsobj.h2.get_text()+bsobj.h3.get_text()
-                    #_, kind, _, date, ban = bsobj.select('div[class="lai"]')[0].get_text().split()[0:5]
-                    kind = '人民日报'
-                    date = '-'.join(contenturl.split('/')[5:7])
-                    ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('div[id="articleContent"] p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except:
-                    pass#logging.error('parse %s error' % contenturl)
-                finally:
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                self.tellSignal.emit('parse %s' % contenturl)
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = bsobj.h1.get_text()+bsobj.h2.get_text()+bsobj.h3.get_text()
+                #_, kind, _, date, ban = bsobj.select('div[class="lai"]')[0].get_text().split()[0:5]
+                kind = '人民日报'
+                date = '-'.join(contenturl.split('/')[5:7])
+                ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('div[id="articleContent"] p')])
+                news = News(title, content, kind, date, ban)
+                #pickle.dump(news, f, True)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except:
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
+
 
 
 class GmrbDownloadThread(QThread):
@@ -125,6 +193,7 @@ class GmrbDownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -133,9 +202,18 @@ class GmrbDownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+        
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
@@ -176,34 +254,33 @@ class GmrbDownloadThread(QThread):
 
     def parse_content(self):
         self.tellSignal.emit('parse_content')
-        # i['name'] = response.xpath('//h1/text()').extract()[0]
-        # i['ban']=response.xpath('//div[@class="lai"]/text()').extract()[0].split()[4]
-        # i['date']=response.xpath('//div[@class="lai"]/text()').extract()[0].split()[3]
-        # i['content']=u''.join(response.xpath('//div[@id="articleContent"]/descendant::text()').extract())
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('gmdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    #logging.info('parse %s' % contenturl)
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = bsobj.h1.get_text()+bsobj.h2.get_text()+bsobj.h3.get_text()
-                    #kind, date, ban = bsobj.select('div[class="lai"] b')[0].get_text().split()[0:2]
-                    kind = '光明日报'
-                    #ban = contenturl.split('/')
-                    date = '-'.join(contenturl.split('/')[5:7])
-                    ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('div[id="articleContent"] p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except Exception as e:
-                    print(e)#logging.error('parse %s error' % contenturl)
-                finally:
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                self.tellSignal.emit('parse %s' % contenturl)
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = bsobj.h1.get_text()+bsobj.h2.get_text()+bsobj.h3.get_text()
+                #kind, date, ban = bsobj.select('div[class="lai"] b')[0].get_text().split()[0:2]
+                kind = '光明日报'
+                #ban = contenturl.split('/')
+                date = '-'.join(contenturl.split('/')[5:7])
+                ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('div[id="articleContent"] p')])
+                news = News(title, content, kind, date, ban)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except Exception as e:
+                print(e)
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
+
 
 class JjrbDownloadThread(QThread):
 
@@ -218,6 +295,7 @@ class JjrbDownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -226,9 +304,18 @@ class JjrbDownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
@@ -276,27 +363,30 @@ class JjrbDownloadThread(QThread):
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('gmdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    #logging.info('parse %s' % contenturl)
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = ' '.join([s.get_text() for s in bsobj.select('td.STYLE32 td')[0:3]])
-                    #kind, date, ban = bsobj.select('div[class="lai"] b')[0].get_text().split()[0:2]
-                    kind = '经济日报'
-                    ban = bsobj.find(text=re.compile('(第\d{2}版)：$'))[1:-2]
-                    date = '-'.join(contenturl.split('/')[5:7])
-                    #ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('founder-content p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except Exception as e:
-                    print(e)#logging.error('parse %s error' % contenturl)
-                finally:
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
+
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                #logging.info('parse %s' % contenturl)
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = ' '.join([s.get_text() for s in bsobj.select('td.STYLE32 td')[0:3]])
+                #kind, date, ban = bsobj.select('div[class="lai"] b')[0].get_text().split()[0:2]
+                kind = '经济日报'
+                ban = bsobj.find(text=re.compile('(第\d{2}版)：$'))[1:-2]
+                date = '-'.join(contenturl.split('/')[5:7])
+                #ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('founder-content p')])
+                news = News(title, content, kind, date, ban)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except:
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
+
 
 class TjrbDownloadThread(QThread):
 
@@ -311,6 +401,7 @@ class TjrbDownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -319,9 +410,18 @@ class TjrbDownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
@@ -359,25 +459,28 @@ class TjrbDownloadThread(QThread):
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('gmdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = ' '.join([bsobj.select('.font01')[0].get_text(),bsobj.select('.font02')[0].get_text(),bsobj.select('.font02')[1].get_text()])
-                    kind = '天津日报'
-                    ban = bsobj.find(text=re.compile('(第\d{2}版)：$'))[1:-2]
-                    date = '-'.join(contenturl.split('/')[5:7])
-                    #ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('founder-content p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except Exception as e:
-                    print(e)#logging.error('parse %s error' % contenturl)
-                finally:
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
+
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = ' '.join([bsobj.select('.font01')[0].get_text(),bsobj.select('.font02')[0].get_text(),bsobj.select('.font02')[1].get_text()])
+                kind = '天津日报'
+                ban = bsobj.find(text=re.compile('(第\d{2}版)：$'))[1:-2]
+                date = '-'.join(contenturl.split('/')[5:7])
+                #ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('founder-content p')])
+                news = News(title, content, kind, date, ban)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except:
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
+
 
 class BjrbDownloadThread(QThread):
 
@@ -392,6 +495,7 @@ class BjrbDownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -400,9 +504,18 @@ class BjrbDownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
@@ -453,26 +566,27 @@ class BjrbDownloadThread(QThread):
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('gmdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = bsobj.h1.string.strip()+' '.join(bsobj.select('h2')[0].get_text()+bsobj.select('h2')[1].get_text()).strip()
-                    kind = '北京日报'
-                    ban = bsobj.select('#list span')[3].get_text().split()[-1]
-                    date = '-'.join(contenturl.split('/')[4:6])
-                    #ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('div.text p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except Exception as e:
-                    print(e)#logging.error('parse %s error' % contenturl)
-                finally:
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
 
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = bsobj.h1.string.strip()+' '.join(bsobj.select('h2')[0].get_text()+bsobj.select('h2')[1].get_text()).strip()
+                kind = '北京日报'
+                ban = bsobj.select('#list span')[3].get_text().split()[-1]
+                date = '-'.join(contenturl.split('/')[4:6])
+                #ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('div.text p')])
+                news = News(title, content, kind, date, ban)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except:
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
 class XxsbDownloadThread(QThread):
 
     endDownload = pyqtSignal()
@@ -486,6 +600,7 @@ class XxsbDownloadThread(QThread):
         self.starturls = []
         self.helperurls = []
         self.contenturls = []
+        self.myqueue = pipline
         #self.startDownload.connect(self.start)
 
     def start_download(self,sDate,eDate,Ban):
@@ -494,9 +609,18 @@ class XxsbDownloadThread(QThread):
         self.start()
 
     def run(self):
+        global workingThreadsCount
+
+        mutex.lock()
+        workingThreadsCount += 1
+        mutex.unlock()
         self.gen_starturl()
         self.get_contenturls()
         self.parse_content()
+        mutex.lock()
+        workingThreadsCount -= 1
+        mutex.unlock()
+        self.endDownload.emit()
 
 
     def gen_starturl(self):
@@ -548,26 +672,27 @@ class XxsbDownloadThread(QThread):
         total = len(self.contenturls)
         self.setMaximumSignal.emit(total)
         self.tellSignal.emit(str(total))
-        with open('xxdata.bin', 'wb') as f:
-            for i, contenturl in enumerate(self.contenturls, 1):
-                try:
-                    html = urllib.request.urlopen(contenturl)
-                    bsobj = BeautifulSoup(html,'lxml')
-                    title = bsobj.h3.string.strip()+' '.join(bsobj.select('h4')[0].get_text()+bsobj.select('h4')[1].get_text()).strip()
-                    kind = '学习时报'
-                    ban = bsobj.find(text=re.compile('第.*版')).split(' ')[-1].split(':')[0]
-                    date = contenturl.split('/')[-2]
-                    #ban = contenturl.split('.')[-2].split('-')[-1]
-                    content = '\n'.join([p.get_text() for p in bsobj.select('div.text p')])
-                    news = News(title, content, kind, date, ban)
-                    saved = False
-                    pickle.dump(news, f, True)
-                except Exception as e:
-                    print(e)#logging.error('parse %s error' % contenturl)
-                finally:
 
-                    self.progressSignal.emit(i)
-        self.endDownload.emit()
+        for i, contenturl in enumerate(self.contenturls, 1):
+            try:
+                html = urllib.request.urlopen(contenturl)
+                bsobj = BeautifulSoup(html,'lxml')
+                title = bsobj.h3.string.strip()+' '.join([x.get_text().strip() for x in bsobj.select('h4')])
+                kind = '学习时报'
+                ban = bsobj.find(text=re.compile('第.*版')).split(' ')[-1].split(':')[0]
+                date = contenturl.split('/')[-2]
+                #ban = contenturl.split('.')[-2].split('-')[-1]
+                content = '\n'.join([p.get_text() for p in bsobj.select('div.text p')])
+                news = News(title, content, kind, date, ban)
+                self.myqueue.put(news)
+
+                mutex.lock()
+                workStart.wakeAll()
+                mutex.unlock()
+            except:
+                self.tellSignal.emit('parse %s error' % contenturl)
+            finally:
+                self.progressSignal.emit(i)
 
 if __name__=='__main__':
     qapp=QCoreApplication([])

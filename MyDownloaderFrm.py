@@ -5,6 +5,8 @@ from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QDialog
 from downloader import Ui_Dialog
 from SingleDownloaderFrm import SingleDownloaderFrm
+from DownloadThread import WriteThread,workingThreadsCount,mutex
+
 
 settings=[{'name':'人民日报','class':'DownloadThread()','ban':'1-4'},
           {'name':'光明日报','class':'GmrbDownloadThread()','ban':'1-4'},
@@ -24,15 +26,32 @@ class MainFrmMy(QDialog,Ui_Dialog):
             self.paperlist.append(sf)
             sf.fill_form(s['name'],s['ban'])
             sf.EndDownloadSignal.connect(self.textEdit.insertPlainText)
+            
             self.verticalLayout.addWidget(sf)
 
             #set onekeydown
             self.pushButton.clicked.connect(sf.pushButton.click)
+            sf.pushButton.clicked.connect(self.__writedb__)
         self.pushButton.clicked.connect(self.download)
+        self.pushButton.clicked.connect(self.__writedb__)
 
 
     def download(self):
         self.pushButton.setEnabled(False)
+    
+    #开启单线程写数据库，可通过每个下载或一键下载按钮启动
+    #只有一个写线程，如果已经有了，就什么也不做
+    def __writedb__(self):
+        global workingThreadsCount
+        mutex.lock()
+        if workingThreadsCount == 0:
+            self.w = WriteThread()
+            self.w.endWrite.connect(self.pushButton.setEnabled)
+            for sf in self.paperlist:
+                self.w.endWrite.connect(sf.pushButton.setEnabled)
+            self.w.tellSignal.connect(self.textEdit.insertPlainText)
+            self.w.start()
+        mutex.unlock()
 
 
 if __name__ == "__main__":

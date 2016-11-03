@@ -31,6 +31,8 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
 
     def logmsg(self,s):
         logging.info(s)
+        #TODO:借用一下，向主窗口传消息。命名有错误
+        self.EndDownloadSignal.emit(s)
 
 
 
@@ -46,7 +48,7 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
         self.t.start_download(self.SdateEdit.date(),self.EdateEdit.date(),self.BanlineEdit.text())
 
     def end_download(self):
-        self.pushButton.setEnabled(True)
+        #self.pushButton.setEnabled(True)
         self.EndDownloadSignal.emit(self.groupBox.title()+'下载完成.共下载%d条'%self.progressBar.value())
 
 if __name__ == "__main__":
