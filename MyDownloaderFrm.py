@@ -30,14 +30,18 @@ class MainFrmMy(QDialog,Ui_Dialog):
             self.verticalLayout.addWidget(sf)
 
             #set onekeydown
-            self.pushButton.clicked.connect(sf.pushButton.click)
+            #self.pushButton.clicked.connect(sf.pushButton.click)
             sf.pushButton.clicked.connect(self.__writedb__)
         self.pushButton.clicked.connect(self.download)
-        self.pushButton.clicked.connect(self.__writedb__)
+        #self.pushButton.clicked.connect(self.__writedb__)
 
 
     def download(self):
         self.pushButton.setEnabled(False)
+        for sf in self.paperlist:
+            sf.download()
+        self.__writedb__()
+
     
     #开启单线程写数据库，可通过每个下载或一键下载按钮启动
     #只有一个写线程，如果已经有了，就什么也不做

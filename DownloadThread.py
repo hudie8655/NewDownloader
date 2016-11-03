@@ -52,16 +52,18 @@ class WriteThread(QThread):
             newslist = []
             count = 1
             try:
-                while  count<=20:
-                    newslist.append(self.myqueue.get_nowait())
+                while  count<=100:
+                    newslist.append(self.myqueue.get(timeout=5))
                     count += 1
                 x=[(news.title,news.content,news.type,news.date,news.banci) for news in newslist]
                 conn.executemany("INSERT INTO NEWS (TITLE,CONTENT,TYPE,DATE,BANCI)   VALUES (?,?,?,?,?)",x)
+                conn.commit()
                 self.tellSignal.emit('write thread:write 100')
             except queue.Empty:
                 if len(newslist)>0:
                     x=[(news.title,news.content,news.type,news.date,news.banci) for news in newslist]
                     conn.executemany("INSERT INTO NEWS (TITLE,CONTENT,TYPE,DATE,BANCI)   VALUES (?,?,?,?,?)",x)
+                    conn.commit()
                     self.tellSignal.emit('write thread:write left')
                 mutex.lock()
                 if workingThreadsCount == 0:
@@ -70,7 +72,7 @@ class WriteThread(QThread):
                 else:
                     pass
                 mutex.unlock() 
-        conn.commit()
+
         conn.close()
 
 class DownloadThread(QThread):
@@ -121,7 +123,7 @@ class DownloadThread(QThread):
         # TODO 需要设定最后日期为今日，否则此处逻辑会乱
         # 为了减少判断次数
         #self.endDate = self.endDate if self.endDate > QDate.currentDate() else QDate.currentDate()
-        while i <= self.endDate:
+        while i < self.endDate:
             #logging.info('start date%s', str(i))
             urls = ['http://paper.people.com.cn/rmrb/html/' + i.toString(
                 'yyyy-MM/dd') + '/nbs.D110000renmrb_{:02d}.htm'.format(x) for x in range(1, 5)]
@@ -131,7 +133,7 @@ class DownloadThread(QThread):
         # TODO 不再判断，最多最后一个页面错误抓取几次
             urls = [
             'http://paper.people.com.cn/rmrb/html/' + i.toString('yyyy-MM/dd') + '/nbs.D110000renmrb_{:02d}.htm'.format(
-                x) for x in range(5, 25)]
+                x) for x in range(1, 25)]
             self.starturls.extend(urls)
 
 
@@ -448,9 +450,11 @@ class TjrbDownloadThread(QThread):
                 html = urllib.request.urlopen(url)
                 bsobj = BeautifulSoup(html,'lxml')
                 rp = re.compile('node.*$')
-                for link in bsobj.select('td.default a[href^="content"]'):
+                tmp = set()
+                for link in bsobj.select('a[href^="content"]'):
                     #logging.info('extract %s' % url)
-                    self.contenturls.append(rp.sub(link['href'], url))
+                    tmp.add(rp.sub(link['href'], url))
+                self.contenturls.extend(tmp)
             except Exception as e:
                 print(e)
 
@@ -626,13 +630,12 @@ class XxsbDownloadThread(QThread):
     def gen_starturl(self):
         #TODO:稍后有时间修改优化其他报纸，index均从首页提取，更为科学准确
         def extract_indexs(url):
-            tmp=set([url])
+            tmp=set()
             try:
                 html = urllib.request.urlopen(url)
                 bsobj = BeautifulSoup(html,'lxml')
-                rp = re.compile('node.*$')
-                for link in bsobj.select('a[href^="node_"]'):
-                    tmp.add(rp.sub(link['href'], url))
+                for link in bsobj.select('a[href*="vA"]'):
+                    tmp.add('http://dzb.studytimes.cn'+link['href'])
             except URLError:
                 self.tellSignal.emit(url+'无学习时报报纸')
                 return []
@@ -662,7 +665,7 @@ class XxsbDownloadThread(QThread):
                 html = urllib.request.urlopen(url)
                 bsobj = BeautifulSoup(html,'lxml')
                 #rp = re.compile('node.*$')
-                for link in bsobj.select('a[href*="vA"]'):
+                for link in bsobj.select('div.pic a[href^="/shtml/xxsb/"]'):
                     self.contenturls.append('http://dzb.studytimes.cn'+link['href'])
             except Exception as e:
                 print(e)
@@ -677,19 +680,21 @@ class XxsbDownloadThread(QThread):
             try:
                 html = urllib.request.urlopen(contenturl)
                 bsobj = BeautifulSoup(html,'lxml')
-                title = bsobj.h3.string.strip()+' '.join([x.get_text().strip() for x in bsobj.select('h4')])
+                title = bsobj.select('div.details h3')[0].get_text().strip()+' '.join([x.get_text().strip() for x in bsobj.select('h4')])
+                title=re.sub(' ','',title)
                 kind = '学习时报'
-                ban = bsobj.find(text=re.compile('第.*版')).split(' ')[-1].split(':')[0]
+                ban = bsobj.find(text=re.compile('第.*版')).split(' ')[-1].split('：')[0]
                 date = contenturl.split('/')[-2]
                 #ban = contenturl.split('.')[-2].split('-')[-1]
-                content = '\n'.join([p.get_text() for p in bsobj.select('div.text p')])
+                content = '\n'.join(bsobj.select('div#content_div p')[0].get_text().split('\u3000\u3000'))
                 news = News(title, content, kind, date, ban)
                 self.myqueue.put(news)
 
                 mutex.lock()
                 workStart.wakeAll()
                 mutex.unlock()
-            except:
+            except Exception as e:
+                print(e)
                 self.tellSignal.emit('parse %s error' % contenturl)
             finally:
                 self.progressSignal.emit(i)
