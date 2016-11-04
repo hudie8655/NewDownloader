@@ -6,6 +6,7 @@ import urllib.request
 from testOfflineDB import News
 import queue
 import sqlite3
+from abc import *
 
 
 __author__ = 'user'
@@ -75,7 +76,11 @@ class WriteThread(QThread):
 
         conn.close()
 
+
+        
 class DownloadThread(QThread):
+
+
 
     endDownload = pyqtSignal()
     progressSignal = pyqtSignal(int)
@@ -83,13 +88,11 @@ class DownloadThread(QThread):
     tellSignal = pyqtSignal(str)
     def __init__(self):
         super(DownloadThread,self).__init__()
-        #self.moveToThread(self)
 
         self.starturls = []
-        self.helperurls = []
         self.contenturls = []
         self.myqueue = pipline
-        #self.startDownload.connect(self.start)
+
 
     def start_download(self,sDate,eDate,Ban):
         self.startDate = sDate
@@ -110,6 +113,19 @@ class DownloadThread(QThread):
         mutex.unlock()
         self.endDownload.emit()
 
+    @abstractmethod
+    def gen_starturl(self):    
+        pass
+
+    @abstractmethod
+    def get_contenturls(self):
+        pass
+
+    @abstractmethod            
+    def parse_content(self):
+        pass
+        
+class RmrbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
     
@@ -180,43 +196,8 @@ class DownloadThread(QThread):
             finally:
                 self.progressSignal.emit(i)
 
-
-
-class GmrbDownloadThread(QThread):
-
-    endDownload = pyqtSignal()
-    progressSignal = pyqtSignal(int)
-    setMaximumSignal = pyqtSignal(int)
-    tellSignal = pyqtSignal(str)
-    def __init__(self):
-        super(GmrbDownloadThread,self).__init__()
-        #self.moveToThread(self)
-
-        self.starturls = []
-        self.helperurls = []
-        self.contenturls = []
-        self.myqueue = pipline
-        #self.startDownload.connect(self.start)
-
-    def start_download(self,sDate,eDate,Ban):
-        self.startDate = sDate
-        self.endDate = eDate
-        self.start()
-
-    def run(self):
-        global workingThreadsCount
-        
-        mutex.lock()
-        workingThreadsCount += 1
-        mutex.unlock()
-        self.gen_starturl()
-        self.get_contenturls()
-        self.parse_content()
-        mutex.lock()
-        workingThreadsCount -= 1
-        mutex.unlock()
-        self.endDownload.emit()
-
+                
+class GmrbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
         self.tellSignal.emit('gen')
@@ -252,7 +233,7 @@ class GmrbDownloadThread(QThread):
                     #logging.info('extract %s' % url)
                     self.contenturls.append(rp.sub(link['href'], url))
             except Exception as e:
-                print(e)
+                pass
 
     def parse_content(self):
         self.tellSignal.emit('parse_content')
@@ -278,47 +259,13 @@ class GmrbDownloadThread(QThread):
                 workStart.wakeAll()
                 mutex.unlock()
             except Exception as e:
-                print(e)
+                #print(e)
                 self.tellSignal.emit('parse %s error' % contenturl)
             finally:
                 self.progressSignal.emit(i)
 
 
-class JjrbDownloadThread(QThread):
-
-    endDownload = pyqtSignal()
-    progressSignal = pyqtSignal(int)
-    setMaximumSignal = pyqtSignal(int)
-    tellSignal = pyqtSignal(str)
-    def __init__(self):
-        super(JjrbDownloadThread,self).__init__()
-        #self.moveToThread(self)
-
-        self.starturls = []
-        self.helperurls = []
-        self.contenturls = []
-        self.myqueue = pipline
-        #self.startDownload.connect(self.start)
-
-    def start_download(self,sDate,eDate,Ban):
-        self.startDate = sDate
-        self.endDate = eDate
-        self.start()
-
-    def run(self):
-        global workingThreadsCount
-
-        mutex.lock()
-        workingThreadsCount += 1
-        mutex.unlock()
-        self.gen_starturl()
-        self.get_contenturls()
-        self.parse_content()
-        mutex.lock()
-        workingThreadsCount -= 1
-        mutex.unlock()
-        self.endDownload.emit()
-
+class JjrbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
         self.tellSignal.emit('gen')
@@ -390,41 +337,7 @@ class JjrbDownloadThread(QThread):
                 self.progressSignal.emit(i)
 
 
-class TjrbDownloadThread(QThread):
-
-    endDownload = pyqtSignal()
-    progressSignal = pyqtSignal(int)
-    setMaximumSignal = pyqtSignal(int)
-    tellSignal = pyqtSignal(str)
-    def __init__(self):
-        super(TjrbDownloadThread,self).__init__()
-        #self.moveToThread(self)
-
-        self.starturls = []
-        self.helperurls = []
-        self.contenturls = []
-        self.myqueue = pipline
-        #self.startDownload.connect(self.start)
-
-    def start_download(self,sDate,eDate,Ban):
-        self.startDate = sDate
-        self.endDate = eDate
-        self.start()
-
-    def run(self):
-        global workingThreadsCount
-
-        mutex.lock()
-        workingThreadsCount += 1
-        mutex.unlock()
-        self.gen_starturl()
-        self.get_contenturls()
-        self.parse_content()
-        mutex.lock()
-        workingThreadsCount -= 1
-        mutex.unlock()
-        self.endDownload.emit()
-
+class TjrbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
         self.tellSignal.emit('gen')
@@ -486,41 +399,7 @@ class TjrbDownloadThread(QThread):
                 self.progressSignal.emit(i)
 
 
-class BjrbDownloadThread(QThread):
-
-    endDownload = pyqtSignal()
-    progressSignal = pyqtSignal(int)
-    setMaximumSignal = pyqtSignal(int)
-    tellSignal = pyqtSignal(str)
-    def __init__(self):
-        super(BjrbDownloadThread,self).__init__()
-        #self.moveToThread(self)
-
-        self.starturls = []
-        self.helperurls = []
-        self.contenturls = []
-        self.myqueue = pipline
-        #self.startDownload.connect(self.start)
-
-    def start_download(self,sDate,eDate,Ban):
-        self.startDate = sDate
-        self.endDate = eDate
-        self.start()
-
-    def run(self):
-        global workingThreadsCount
-
-        mutex.lock()
-        workingThreadsCount += 1
-        mutex.unlock()
-        self.gen_starturl()
-        self.get_contenturls()
-        self.parse_content()
-        mutex.lock()
-        workingThreadsCount -= 1
-        mutex.unlock()
-        self.endDownload.emit()
-
+class BjrbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
         #TODO:稍后有时间修改优化其他报纸，index均从首页提取，更为科学准确
@@ -591,41 +470,7 @@ class BjrbDownloadThread(QThread):
                 self.tellSignal.emit('parse %s error' % contenturl)
             finally:
                 self.progressSignal.emit(i)
-class XxsbDownloadThread(QThread):
-
-    endDownload = pyqtSignal()
-    progressSignal = pyqtSignal(int)
-    setMaximumSignal = pyqtSignal(int)
-    tellSignal = pyqtSignal(str)
-    def __init__(self):
-        super(XxsbDownloadThread,self).__init__()
-        #self.moveToThread(self)
-
-        self.starturls = []
-        self.helperurls = []
-        self.contenturls = []
-        self.myqueue = pipline
-        #self.startDownload.connect(self.start)
-
-    def start_download(self,sDate,eDate,Ban):
-        self.startDate = sDate
-        self.endDate = eDate
-        self.start()
-
-    def run(self):
-        global workingThreadsCount
-
-        mutex.lock()
-        workingThreadsCount += 1
-        mutex.unlock()
-        self.gen_starturl()
-        self.get_contenturls()
-        self.parse_content()
-        mutex.lock()
-        workingThreadsCount -= 1
-        mutex.unlock()
-        self.endDownload.emit()
-
+class XxsbDownloadThread(DownloadThread):
 
     def gen_starturl(self):
         #TODO:稍后有时间修改优化其他报纸，index均从首页提取，更为科学准确

@@ -10,7 +10,7 @@ from SingleDownloaderFrm import SingleDownloaderFrm
 from DownloadThread import WriteThread,workingThreadsCount,mutex
 
 
-settings=[{'name':'人民日报','class':'DownloadThread()','ban':'1-4'},
+settings=[{'name':'人民日报','class':'RmrbDownloadThread()','ban':'1-4'},
           {'name':'光明日报','class':'GmrbDownloadThread()','ban':'1-4'},
           {'name':'经济日报','class':'JjrbDownloadThread()','ban':'1-4'},
           {'name':'天津日报','class':'TjrbDownloadThread()','ban':'1-4'},
