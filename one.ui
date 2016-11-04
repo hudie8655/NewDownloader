@@ -31,7 +31,7 @@
    <property name="title">
     <string>GroupBox</string>
    </property>
-   <widget class="QWidget" name="">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
       <x>10</x>
@@ -70,7 +70,11 @@
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="BanlineEdit"/>
+      <widget class="QLineEdit" name="BanlineEdit">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+      </widget>
      </item>
      <item>
       <widget class="QProgressBar" name="progressBar">
@@ -89,8 +93,6 @@
     </layout>
    </widget>
   </widget>
-  <zorder>groupBox</zorder>
-  <zorder>horizontalLayoutWidget</zorder>
  </widget>
  <resources/>
  <connections/>

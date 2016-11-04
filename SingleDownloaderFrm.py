@@ -32,13 +32,14 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
     def logmsg(self,s):
         logging.info(s)
         #TODO:借用一下，向主窗口传消息。命名有错误
-        self.EndDownloadSignal.emit(s)
+        #self.EndDownloadSignal.emit(s)
 
 
 
     def download(self):
         self.pushButton.setEnabled(False)
         self.t = eval(self._class_name)#DownloadThread()
+        self.t.moveToThread(self.t)
         self.t.progressSignal.connect(self.progressBar.setValue)
         self.t.setMaximumSignal.connect(self.progressBar.setMaximum)
         self.t.tellSignal.connect(self.logmsg)

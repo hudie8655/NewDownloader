@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import time
+
 __author__ = 'user'
 
 from PyQt5 import QtWidgets
@@ -40,6 +42,7 @@ class MainFrmMy(QDialog,Ui_Dialog):
         self.pushButton.setEnabled(False)
         for sf in self.paperlist:
             sf.download()
+            #time.sleep(1)
         self.__writedb__()
 
     
@@ -50,10 +53,13 @@ class MainFrmMy(QDialog,Ui_Dialog):
         mutex.lock()
         if workingThreadsCount == 0:
             self.w = WriteThread()
-            self.w.endWrite.connect(self.pushButton.setEnabled)
+            self.w.moveToThread(
+                self.w
+            )
+            #self.w.endWrite.connect(self.pushButton.setEnabled)
             for sf in self.paperlist:
                 self.w.endWrite.connect(sf.pushButton.setEnabled)
-            self.w.tellSignal.connect(self.textEdit.insertPlainText)
+            #self.w.tellSignal.connect(self.textEdit.insertPlainText)
             self.w.start()
         mutex.unlock()
 
