@@ -11,7 +11,7 @@ __author__ = 'user'
 class SingleDownloaderFrm(QFrame,Ui_Frame):
     sendSettingSignal = pyqtSignal(QDate,QDate,str)
     EndDownloadSignal = pyqtSignal(str)
-    def __init__(self,parent=None,classname='DownloadThread()'):
+    def __init__(self,parent=None,classname='Rmrb'):
         super(QFrame,self).__init__(parent)
         self.setupUi(self)
         self._class_name = classname
@@ -38,7 +38,8 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
 
     def download(self):
         self.pushButton.setEnabled(False)
-        self.t = eval(self._class_name)#DownloadThread()
+        self.t = DownloadThread(globals()[self._class_name](self.SdateEdit.date(),self.EdateEdit.date(),self.BanlineEdit.text()))#eval(self._class_name)#DownloadThread()
+
         self.t.moveToThread(self.t)
         self.t.progressSignal.connect(self.progressBar.setValue)
         self.t.setMaximumSignal.connect(self.progressBar.setMaximum)
@@ -46,7 +47,8 @@ class SingleDownloaderFrm(QFrame,Ui_Frame):
         self.t.endDownload.connect(self.end_download)
         #self.sendSettingSignal.connect(self.t.get_settings)
         #self.sendSettingSignal.emit(self.SdateEdit.date(),self.EdateEdit.date(),self.BanlineEdit.text())
-        self.t.start_download(self.SdateEdit.date(),self.EdateEdit.date(),self.BanlineEdit.text())
+        #self.t.start_download(self.SdateEdit.date(),self.EdateEdit.date(),self.BanlineEdit.text())
+        self.t.start()
 
     def end_download(self):
         #self.pushButton.setEnabled(True)
