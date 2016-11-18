@@ -388,7 +388,7 @@ class Xwcb(Rmrb):
         kind = '新闻出版报'
         ban = re.findall('d(\d*?)b',contenturl)[0]
         date =contenturl.split('/')[-2]
-        #TODO:
+        #TODO::
         # INFO:root:parse http://data.chinaxwcb.com/epaper2016/epaper/d6388/d7b/201611/72949.html
         # encoding error : input conversion failed due to input error, bytes 0xAC 0x6D 0x27 0x20
         # encoding error : input conversion failed due to input error, bytes 0xAC 0x6D 0x27 0x20
