@@ -319,6 +319,7 @@ class Xxsb(Paper):
 
     def gen_url(self):
         #TODO:稍后有时间修改优化其他报纸，index均从首页提取，更为科学准确
+        #TODO:view-source:http://dzb.studytimes.cn/shtml/xxsb/calendar.shtml re.findall('xxsb/(\d{8})',urlopen)
         def extract_indexs(url):
             tmp=set()
             try:
@@ -366,3 +367,32 @@ class Xxsb(Paper):
 
 #
 #
+class Xwcb(Rmrb):
+
+    def __init__(self,sDate, eDate, Ban):
+        super().__init__(sDate, eDate, Ban)
+        self.replace= '^.*Index.html$'
+        self.postion = 'div.btli a'
+
+    def gen_url(self):
+        # i = self.sDate
+        # while i <= self.eDate:
+        #     for url in ['http://epaper.tianjinwe.com/tjrb/tjrb/' + i.toString('yyyy-MM/dd') + '/node_{:d}.htm'.format(x) for x in range(2, 3)]:
+        #         yield  url
+        #     i = i.addDays(1)
+        for url in  ['http://data.chinaxwcb.com/epaper2016/epaper/d{}/Index.html'.format(x) for x in range(6175,6389)]:
+            yield  url
+
+    def extract_items(self,contenturl, bsobj):
+        title =  ''.join([h.get_text() for h in bsobj.select('div.mainL h1')])
+        kind = '新闻出版报'
+        ban = re.findall('d(\d*?)b',contenturl)[0]
+        date =contenturl.split('/')[-2]
+        #TODO
+        # INFO:root:parse http://data.chinaxwcb.com/epaper2016/epaper/d6388/d7b/201611/72949.html
+        # encoding error : input conversion failed due to input error, bytes 0xAC 0x6D 0x27 0x20
+        # encoding error : input conversion failed due to input error, bytes 0xAC 0x6D 0x27 0x20
+        # encoding error : input conversion failed due to input error, bytes 0xAC 0x6D 0x27 0x20
+        # INFO:root:parse http://data.chinaxwcb.com/epaper2016/epaper/d6388/d7b/201611/72950.html
+        content = '\n'.join([p.get_text() for p in bsobj.select('div.content p')])
+        return title, content, kind, date, ban

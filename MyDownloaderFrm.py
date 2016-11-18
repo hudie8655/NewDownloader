@@ -15,7 +15,8 @@ settings=[{'name':'人民日报','class':'Rmrb','ban':'1-4'},
           {'name':'经济日报','class':'Jjrb','ban':'1-4'},
           {'name':'天津日报','class':'Tjrb','ban':'1-4'},
           {'name':'北京日报','class':'Bjrb','ban':'1-4'},
-          {'name':'学习时报','class':'Xxsb','ban':'1-4'}]
+          {'name':'学习时报','class':'Xxsb','ban':'1-4'},
+          {'name':'新闻出版报','class':'Xwcb','ban':'1-4'},]
 
 class MainFrmMy(QDialog,Ui_Dialog):
     def __init__(self,parent=None):
